@@ -17,6 +17,7 @@ This file is part of primeDiceBot.
 import requests
 import json
 import sys
+import logging
 
 class primedice():
     def __init__(self):
@@ -28,11 +29,14 @@ class primedice():
         }
         self.session = requests.Session()
         self.bet_count = 0
+        self.sleep_interval = 1
 
     def session_post(self, url, post):
-        answer = self.session.post(url, data = post, headers = self.headers)
+        answer = self.session.post(url, data = post, headers = self.headers)        
+        logging.debug ("answer:'"+str(answer)+"'")
         if answer.status_code == 429:
-            print "Too many requests"
+            logging.debug ("Too many requests")
+            return answer
         else:
             return answer
 
@@ -45,25 +49,37 @@ class primedice():
             'opt':''
         }
 
-        login_response = self.session_post(self.login_url, post_data).content
+        logging.debug("login_response ")
         try:
-            self.token = json.loads(login_response)["access_token"]
+          login_response = self.session_post(self.login_url, post_data).content.decode()
+          logging.debug("login_response2 ")
+        except AttributeError as atr_err:
+            logging.critical("Can not process login url: AttributeError "+str(atr_err))
+            print ("Exit")
+            sys.exit(0)
+          
+        try:            
+            logging.debug("get token")
+            logging.debug("login_response = "+str(login_response))
+            self.token = json.loads(str(login_response))["access_token"]
+            logging.debug("Token = "+str(self.token))
             self.bet_url_params = self.bet_url + "?access_token=" + self.token
             self.info_url_params = self.info_url + "?access_token=" + self.token
 
             self.balance = json.loads(\
-            self.session.get(self.info_url_params).content\
+            self.session.get(self.info_url_params).content.decode()\
             )["user"]["balance"]
 
-            print "Login successful, token = %s" % (self.token)
+            logging.debug ("Login successful, token = %s" % (self.token))
 
-        except:
+        except Exception as exc:
+            logging.debug ("Exception while Auth: '"+str(type(exc))+" "+str(exc)) 
             if login_response == "Unauthorized":
                 sys.exit("Wrong login details")
             elif login_response == "Too many requests.":
                 sys.exit("Too many requests. Wait before running the script again")
             else:
-                print("Something went wrong, unknown error")
+                logging.debug("Something went wrong, unknown error")
                 sys.exit(login_response)
 
     def bet(self, amount = 0, target = 95, condition = "<"):
@@ -75,7 +91,7 @@ class primedice():
 
         #try:
         if not condition in ["<",">"]:
-            print "Wrong condition. Must be either > or <"
+            logging.debug ("Wrong condition. Must be either > or <")
         else:
             params = {
                 'access_token': self.token
@@ -87,7 +103,7 @@ class primedice():
             }
             rix = self.session_post(self.bet_url_params, post = post_data)
             if rix.status_code == 200:
-                bet_response = json.loads(rix.content)
+                bet_response = json.loads(rix.content.decode())
 
                 feedback = {
                     'jackpot': bet_response["bet"]["jackpot"],
@@ -99,12 +115,12 @@ class primedice():
             elif rix.status_code == 400 and rix.content == "Insufficient funds":
                 sys.exit("Insufficient funds")
             else:
-                print "You have to debug this error"
-                print rix
-                print rix.content
+                logging.debug ("You have to debug this error")
+                logging.debug (rix)
+                logging.debug (rix.content)
 
         #except:
-        #    print "Some error happened processing your request"
+        #    logging.debug ("Some error happened processing your request")
 
 class helpers():
     def config_check(self, config):
